@@ -12,6 +12,7 @@ import com.ning.http.client.*;
 import com.ning.http.client.uri.Uri;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.Closeable;
@@ -24,21 +25,40 @@ public class Zendesk implements Closeable {
     private static final String JSON = "application/json; charset=UTF-8";
     private static final Pattern RESTRICTED_PATTERN = Pattern.compile("%2B", Pattern.LITERAL);
 
-
     private final boolean closeClient;
-    private final AsyncHttpClient client;
+    private AsyncHttpClient client = null;
     private final Realm realm;
     private final String url;
     private final String oauthToken;
+    private String username;
+    private String password;
     private final ObjectMapper mapper;
     private final Logger logger;
     private boolean closed = false;
 
+    @Value("#{envPC['zendesk.token']} : ''")
+    public String TOKEN_ZENDESK;
 
-    private Zendesk(AsyncHttpClient client, String url, String username, String password) {
+    @Value("#{envPC['zendesk.url']} : ''")
+    public String URL_ZENDESK;
+
+    @Value("#{envPC['zendesk.user']} : ''")
+    public String ZENDESK_USER;
+
+
+    // Modificamos el constructor para poder inyectar el bean con valores por defecto
+    // El cliente no se inyecta, lo generamos en el constructor, lo que facilitara el testeo
+    // Usamos el valor del token por defecto que se usaba en ZendeskService
+    // En ZendeskService no se usaba el password asi que le asignamos oauth por defecto
+    // Pasamos el token
+    private Zendesk(@Value("#{envPC['zendesk.url']}") String url,
+                    @Value("#{envPC['zendesk.user']}") String username,
+                    @Value("#{envPC['zendesk.token']}") String oauthToken) {
         this.logger = LoggerFactory.getLogger(Zendesk.class);
         this.closeClient = client == null;
-        this.oauthToken = null;
+        this.oauthToken = oauthToken;
+        this.username = username;
+        this.password = oauthToken;
         this.client = client == null ? new AsyncHttpClient() : client;
         this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
         if (username != null) {
@@ -59,7 +79,7 @@ public class Zendesk implements Closeable {
 
     public Ticket createTicket(Ticket ticket) {
         return complete(submit(req("POST", cnst("/tickets.json"),
-                        JSON, json(Collections.singletonMap("ticket", ticket))),
+                JSON, json(Collections.singletonMap("ticket", ticket))),
                 new ZendeskAsyncCompletionHandler<Ticket>(Ticket.class, "ticket", mapper)));
     }
 
@@ -70,7 +90,9 @@ public class Zendesk implements Closeable {
             throw new ZendeskException(e.getMessage(), e);
         }
     }
-    
+
+
+
     private Request req(String method, Uri template, String contentType, byte[] body) {
         RequestBuilder builder = new RequestBuilder(method);
         if (realm != null) {
@@ -143,46 +165,5 @@ public class Zendesk implements Closeable {
         }
     }
 
-    public static class Builder {
-        private AsyncHttpClient client = null;
-        private final String url;
-        private String username = null;
-        private String password = null;
-        private String token = null;
-        private String oauthToken = null;
-
-        public Builder(String url) {
-            this.url = url;
-        }
-
-        public Builder setUsername(String username) {
-            this.username = username;
-            return this;
-        }
-
-        public Builder setPassword(String password) {
-            this.password = password;
-            if (password != null) {
-                this.token = null;
-                this.oauthToken = null;
-            }
-            return this;
-        }
-
-        public Builder setToken(String token) {
-            this.token = token;
-            if (token != null) {
-                this.password = null;
-                this.oauthToken = null;
-            }
-            return this;
-        }
-
-        public Zendesk build() {
-            if (token != null) {
-                return new Zendesk(client, url, username + "/token", token);
-            }
-            return new Zendesk(client, url, username, password);
-        }
-    }
+    // Eliminamos la clase Builder que ya no es necesaria
 }
