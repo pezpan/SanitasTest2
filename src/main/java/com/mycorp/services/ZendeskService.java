@@ -25,8 +25,6 @@ public class ZendeskService {
     @Value("#{envPC['zendesk.ticket']}")
     public String PETICION_ZENDESK= "";
 
-
-
     @Value("#{envPC['tarjetas.getDatos']}")
     public String TARJETAS_GETDATOS = "";
 
